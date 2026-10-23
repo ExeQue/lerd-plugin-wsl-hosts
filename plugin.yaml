@@ -14,4 +14,4 @@ hooks:
   worktree.added: bin/on-event
   service.started: bin/on-event
 
-requires: [wslpath, iconv, curl]
+requires: [iconv, curl]

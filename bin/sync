@@ -13,6 +13,7 @@ esac
 
 sites=~/.local/share/lerd/sites.yaml
 win_hosts=/mnt/c/Windows/System32/drivers/etc/hosts
+command -v wslpath >/dev/null && [ -f "$win_hosts" ] || { echo "wsl-hosts only runs under WSL" >&2; exit 1; }
 
 # ponytail: line-based read of lerd's generated YAML, swap for yq if the format ever changes
 mapfile -t domains < <(

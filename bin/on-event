@@ -3,6 +3,9 @@
 # so a hook only checks and tells the user to run the sync when a domain is missing.
 set -euo pipefail
 
+# Not WSL (or Windows' drive is not mounted): nothing to keep in sync.
+[ -f /mnt/c/Windows/System32/drivers/etc/hosts ] || exit 0
+
 missing=$("$LERD_PLUGIN_DIR/bin/sync" --check)
 [ -z "$missing" ] && exit 0
 
