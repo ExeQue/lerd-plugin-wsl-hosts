@@ -10,7 +10,11 @@ Lines ending in `# lerd` are rewritten on every sync. Every other line is left a
 
 `lerd wsl-hosts:sync -n` shows the diff for both files and changes nothing.
 
-Run the sync after `lerd link`, a new worktree or `lerd service domain`.
+## Notifications
+
+Linking a site, adding a worktree and starting a service check both hosts files without changing them. When a domain is missing from either, lerd shows a **wsl-hosts: Hosts files out of date** notification naming the domains, and you run `lerd wsl-hosts:sync`. A newer one replaces the last, so they do not pile up. Switch them off under **Plugin messages** in lerd's notification settings.
+
+Changing a service's domain with `lerd service domain` fires no event, so run the sync yourself after it.
 
 ## Settings
 
