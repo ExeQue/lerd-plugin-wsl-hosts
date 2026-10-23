@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Sync lerd site domains (sites.yaml) and service domains (config.yaml) into the Windows hosts file (UAC prompt) and /etc/hosts (sudo).
+# Managed lines end with "# lerd" and are rewritten on every run; unmarked lines are never touched.
+# Usage: lerd wsl-hosts:sync [-n]   (-n = dry run, show diff only)
+set -euo pipefail
+
+dry=0
+[ "${1:-}" = "-n" ] && dry=1
+
+sites=~/.local/share/lerd/sites.yaml
+win_hosts=/mnt/c/Windows/System32/drivers/etc/hosts
+
+# ponytail: line-based read of lerd's generated YAML, swap for yq if the format ever changes
+mapfile -t domains < <(
+    awk '/^ *domains:/{d=1;next} d&&/^ *- /{print $2;next} {d=0}' "$sites"
+    awk '/^ *domain: /{print $2}' ~/.config/lerd/config.yaml   # service domains (lerd service domain)
+)
+
+for d in "${domains[@]}"; do
+    [[ $d =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "invalid domain in $sites: $d" >&2; exit 1; }
+done
+
+# Hosts content without managed lines, plus a managed line for each domain not already mapped by hand.
+render() {
+    local body eol=$2
+    body=$(sed -E '/# lerd\r?$/d' "$1")
+    printf '%s\n' "$body"
+    for d in "${domains[@]}"; do
+        maps "$d" <<<"$body" || printf "127.0.0.1 %s # lerd$eol\n" "$d"
+    done
+}
+
+# Reads hosts content on stdin; true when a line maps $1 to 127.0.0.1.
+maps() { grep -qE "^[[:space:]]*127\.0\.0\.1([[:space:]]+[^#[:space:]]+)*[[:space:]]+${1//./\\.}([[:space:]#]|$)"; }
+
+# Where a domain is mapped in a hosts file: by lerd-hosts, by a hand-written line, or not at all.
+source_of() {
+    if grep -qE "^127\.0\.0\.1 ${1//./\\.} # lerd"$'\r'"?$" "$2"; then echo lerd
+    elif maps "$1" <"$2"; then echo "own line"
+    else echo MISSING; fi
+}
+
+# Windows interop may be left off PATH (appendWindowsPath=false).
+PATH="$PATH:/mnt/c/Windows/System32:/mnt/c/Windows/System32/WindowsPowerShell/v1.0"
+command -v powershell.exe >/dev/null || { echo "powershell.exe not found: wsl-hosts needs WSL with Windows interop" >&2; exit 1; }
+
+win_tmp_dir=$(wslpath "$(cmd.exe /c 'echo %TEMP%' 2>/dev/null | tr -d '\r')")
+win_tmp="$win_tmp_dir/lerd-hosts"
+wsl_tmp=$(mktemp)
+trap 'rm -f "$wsl_tmp" "$win_tmp"' EXIT
+
+render "$win_hosts" $'\r' >"$win_tmp"
+render /etc/hosts '' >"$wsl_tmp"
+
+if [ $dry -eq 1 ]; then
+    diff -u --label windows "$win_hosts" --label new "$win_tmp" | tr -d '\r' || true
+    diff -u --label /etc/hosts /etc/hosts --label new "$wsl_tmp" || true
+    exit 0
+fi
+
+win_status=unchanged
+wsl_status=unchanged
+
+if ! cmp -s "$win_tmp" "$win_hosts"; then
+    win_status=updated
+    inner="Copy-Item -LiteralPath '$(wslpath -w "$win_tmp")' -Destination \"\$env:windir\\System32\\drivers\\etc\\hosts\" -Force"
+    encoded=$(printf '%s' "$inner" | iconv -t UTF-16LE | base64 -w0)
+    echo "Windows hosts: accept the UAC prompt..."
+    powershell.exe -NoProfile -Command "Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','$encoded'"
+    cmp -s "$win_tmp" "$win_hosts" || { echo "Windows hosts not updated (UAC declined?)" >&2; exit 1; }
+fi
+
+if ! cmp -s "$wsl_tmp" /etc/hosts; then
+    sudo tee /etc/hosts <"$wsl_tmp" >/dev/null
+    wsl_status=updated
+fi
+
+echo "windows hosts: $win_status | /etc/hosts: $wsl_status"
+for d in "${domains[@]}"; do
+    printf '  %-28s windows: %-9s wsl: %s\n' "$d" "$(source_of "$d" "$win_hosts")" "$(source_of "$d" /etc/hosts)"
+done
