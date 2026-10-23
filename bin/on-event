@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Writing the hosts files needs a UAC prompt and sudo, which a background hook must not raise,
+# so a hook only checks and tells the user to run the sync when a domain is missing.
+set -euo pipefail
+
+missing=$("$LERD_PLUGIN_DIR/bin/sync" --check)
+[ -z "$missing" ] && exit 0
+
+list=$(paste -sd ' ' <<<"$missing" | sed 's/ /, /g')
+count=$(wc -l <<<"$missing")
+[ ${#list} -gt 200 ] && list="$count domains"
+body="Not mapped yet: $list. Run lerd wsl-hosts:sync to add them."
+
+# Domains are validated by bin/sync to [a-z0-9.-], so they need no JSON escaping.
+curl -fsS -X POST -H "X-Lerd-Plugin-Token: $LERD_API_TOKEN" -H 'Content-Type: application/json' \
+    -d "{\"title\":\"Hosts files out of date\",\"body\":\"$body\",\"tag\":\"hosts\"}" \
+    "$LERD_API_URL/api/notifications/plugin" ||
+    echo "$body (lerd could not show it as a notification)" >&2

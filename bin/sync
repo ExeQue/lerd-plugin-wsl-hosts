@@ -2,10 +2,14 @@
 # Sync lerd site domains (sites.yaml) and service domains (config.yaml) into the Windows hosts file (UAC prompt) and /etc/hosts (sudo).
 # Managed lines end with "# lerd" and are rewritten on every run; unmarked lines are never touched.
 # Usage: lerd wsl-hosts:sync [-n]   (-n = dry run, show diff only)
+#        --check: print the domains either hosts file is missing and change nothing (used by the hooks).
 set -euo pipefail
 
-dry=0
-[ "${1:-}" = "-n" ] && dry=1
+dry=0 check=0
+case "${1:-}" in
+    -n) dry=1 ;;
+    --check) check=1 ;;
+esac
 
 sites=~/.local/share/lerd/sites.yaml
 win_hosts=/mnt/c/Windows/System32/drivers/etc/hosts
@@ -39,6 +43,13 @@ source_of() {
     elif maps "$1" <"$2"; then echo "own line"
     else echo MISSING; fi
 }
+
+if [ $check -eq 1 ]; then
+    for d in "${domains[@]}"; do
+        maps "$d" <"$win_hosts" && maps "$d" </etc/hosts || echo "$d"
+    done
+    exit 0
+fi
 
 # Windows interop may be left off PATH (appendWindowsPath=false).
 PATH="$PATH:/mnt/c/Windows/System32:/mnt/c/Windows/System32/WindowsPowerShell/v1.0"
