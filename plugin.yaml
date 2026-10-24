@@ -2,9 +2,10 @@ api_version: 1
 name: wsl-hosts
 lerd: ">=1.37"
 platforms: [linux]
-version: 0.2.0
+version: 0.3.0
 description: Keeps the Windows hosts file and /etc/hosts in sync with lerd's domains under WSL
 docs: DOCS.md
+notifications: true
 
 commands:
   - {name: sync, usage: "Sync lerd domains into the Windows hosts file and /etc/hosts (-n = dry run)", run: bin/sync}

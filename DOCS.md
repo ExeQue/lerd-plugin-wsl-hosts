@@ -12,7 +12,7 @@ Lines ending in `# lerd` are rewritten on every sync. Every other line is left a
 
 ## Notifications
 
-Linking a site, adding a worktree and starting a service check both hosts files without changing them. When a domain is missing from either, lerd shows a **wsl-hosts: Hosts files out of date** notification naming the domains, and you run `lerd wsl-hosts:sync`. A newer one replaces the last, so they do not pile up. Switch them off under **Plugin messages** in lerd's notification settings.
+Linking a site, adding a worktree and starting a service check both hosts files without changing them. When a domain is missing from either, lerd shows a **wsl-hosts: Hosts files out of date** notification naming the domains, and you run `lerd wsl-hosts:sync`. A newer one replaces the last, so they do not pile up. lerd asks whether to allow them when the plugin is installed; change your answer on the plugin's card, under **Plugin messages** in lerd's notification settings, or with `lerd plugin notifications wsl-hosts on|off`. Until they are allowed, the message goes to `hooks.log` in the plugin's data folder instead.
 
 Changing a service's domain with `lerd service domain` fires no event, so run the sync yourself after it.
 
