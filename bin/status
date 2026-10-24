@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# The domains either hosts file does not map yet, with the site, worktree or service each belongs to.
+# CLI: a table, or a line saying all are synced. MCP: a JSON list of the same.
+set -euo pipefail
+
+rows=$("$LERD_PLUGIN_DIR/bin/sync" --status)
+missing=$(awk -F'\t' '$3 == "MISSING" || $4 == "MISSING"' <<<"$rows")
+
+if [ "${LERD_SURFACE:-}" = mcp ]; then
+    python3 -c '
+import json, sys
+print(json.dumps([dict(zip(("domain", "belongs_to", "windows", "wsl"), l.split("\t")))
+                  for l in sys.stdin.read().splitlines() if l]))' <<<"$missing"
+    exit 0
+fi
+
+total=$(grep -c . <<<"$rows" || true)
+if [ -z "$missing" ]; then
+    echo "All $total domains are in both hosts files."
+    exit 0
+fi
+echo "Not synced yet, run lerd wsl-hosts:sync:"
+while IFS=$'\t' read -r d o win wsl; do
+    printf '  %-28s %-24s windows: %-9s wsl: %s\n' "$d" "$o" "$win" "$wsl"
+done <<<"$missing"

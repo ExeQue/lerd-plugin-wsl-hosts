@@ -2,13 +2,25 @@ api_version: 1
 name: wsl-hosts
 lerd: ">=1.38"
 platforms: [linux]
-version: 0.4.0
+version: 0.5.0
 description: Keeps the Windows hosts file and /etc/hosts in sync with lerd's domains under WSL
 docs: DOCS.md
 notifications: true
 
 commands:
   - {name: sync, usage: "Sync lerd domains into the Windows hosts file and /etc/hosts (-n = dry run)", run: bin/sync}
+  - {name: status, usage: "List the sites, worktrees and services whose domains are not in the hosts files yet", run: bin/status}
+
+mcp:
+  tools:
+    - name: status
+      description: >-
+        Under WSL, the lerd domains (sites, worktrees, services) that the Windows hosts file
+        or /etc/hosts does not map to 127.0.0.1 yet, each with what it belongs to and how each
+        file maps it ("lerd", "own line" or "MISSING"). An empty list means all are synced.
+        The user fixes it by running lerd wsl-hosts:sync, which needs a UAC prompt and sudo.
+      input_schema: {type: object, properties: {}}
+      run: bin/status
 
 hooks:
   site.linked: bin/on-event

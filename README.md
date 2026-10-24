@@ -12,7 +12,7 @@ Then run `lerd wsl-hosts:sync`. See [DOCS.md](DOCS.md).
 
 ## What it adds, reads and changes
 
-- **Adds** the CLI command `lerd wsl-hosts:sync`, and hooks on `site.linked`, `worktree.added` and `service.started` that only check the hosts files.
+- **Adds** the CLI commands `lerd wsl-hosts:sync` and `lerd wsl-hosts:status`, the MCP tool `wsl-hosts_status`, and hooks on `site.linked`, `worktree.added` and `service.started` that only check the hosts files.
 - **Reads** lerd's own API with the token lerd gives the plugin, `/api/sites` and `/api/services`, for every site, worktree and service domain, and both hosts files.
 - **Changes** `C:\Windows\System32\drivers\etc\hosts` (through a UAC prompt) and `/etc/hosts` (through `sudo`), only lines ending in `# lerd`, and only when you run `lerd wsl-hosts:sync`. The hooks change nothing.
 - **Sends** a notification through lerd's own API (`POST /api/notifications/plugin`) when a domain is missing, once you allow the plugin's notifications (`notifications: true`; lerd asks at install). Nothing leaves the machine.

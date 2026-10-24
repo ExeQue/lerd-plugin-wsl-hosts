@@ -3,12 +3,14 @@
 # Managed lines end with "# lerd" and are rewritten on every run; unmarked lines are never touched.
 # Usage: lerd wsl-hosts:sync [-n]   (-n = dry run, show diff only)
 #        --check: print the domains either hosts file is missing and change nothing (used by the hooks).
+#        --status: print every domain, what it belongs to and how each hosts file maps it, tab-separated.
 set -euo pipefail
 
-dry=0 check=0
+dry=0 check=0 status=0
 case "${1:-}" in
     -n) dry=1 ;;
     --check) check=1 ;;
+    --status) status=1 ;;
 esac
 
 win_hosts=/mnt/c/Windows/System32/drivers/etc/hosts
@@ -23,17 +25,27 @@ def api(path):
                                  headers={"X-Lerd-Plugin-Token": os.environ["LERD_API_TOKEN"]})
     return json.load(urllib.request.urlopen(req))
 
-seen = []
+# Domain and what it belongs to: the site, the site's worktree branch, or the service.
+seen = {}
 for site in api("/api/sites"):
-    seen += site.get("domains") or [site.get("domain")]
-    seen += [w.get("domain") for w in site.get("worktrees") or []]
-seen += [s.get("domain") for s in api("/api/services")]
-for d in dict.fromkeys(d for d in seen if d):
-    print(d)
+    for d in site.get("domains") or [site.get("domain")]:
+        seen.setdefault(d, site["name"])
+    for w in site.get("worktrees") or []:
+        seen.setdefault(w.get("domain"), f"{site['name']} ({w.get('branch')})")
+for s in api("/api/services"):
+    seen.setdefault(s.get("domain"), f"service {s['name']}")
+for d, owner in seen.items():
+    if d:
+        print(f"{d}\t{owner}")
 PY
 )
 domains=()
-[ -n "$list" ] && mapfile -t domains <<<"$list"
+declare -A owner=()
+while IFS=$'\t' read -r d o; do
+    [ -n "$d" ] || continue
+    domains+=("$d")
+    owner[$d]=$o
+done <<<"$list"
 
 for d in "${domains[@]}"; do
     [[ $d =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "invalid domain from lerd: $d" >&2; exit 1; }
@@ -64,6 +76,13 @@ source_of() {
     elif maps "$1" <"$2"; then echo "own line"
     else echo MISSING; fi
 }
+
+if [ $status -eq 1 ]; then
+    for d in "${domains[@]}"; do
+        printf '%s\t%s\t%s\t%s\n' "$d" "${owner[$d]}" "$(source_of "$d" "$win_hosts")" "$(source_of "$d" /etc/hosts)"
+    done
+    exit 0
+fi
 
 if [ $check -eq 1 ]; then
     for d in "${domains[@]}"; do
@@ -109,5 +128,5 @@ fi
 
 echo "windows hosts: $win_status | /etc/hosts: $wsl_status"
 for d in "${domains[@]}"; do
-    printf '  %-28s windows: %-9s wsl: %s\n' "$d" "$(source_of "$d" "$win_hosts")" "$(source_of "$d" /etc/hosts)"
+    printf '  %-28s %-24s windows: %-9s wsl: %s\n' "$d" "${owner[$d]}" "$(source_of "$d" "$win_hosts")" "$(source_of "$d" /etc/hosts)"
 done
