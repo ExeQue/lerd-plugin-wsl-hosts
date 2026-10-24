@@ -1,8 +1,8 @@
 api_version: 1
 name: wsl-hosts
-lerd: ">=1.37"
+lerd: ">=1.38"
 platforms: [linux]
-version: 0.3.0
+version: 0.4.0
 description: Keeps the Windows hosts file and /etc/hosts in sync with lerd's domains under WSL
 docs: DOCS.md
 notifications: true
@@ -15,4 +15,4 @@ hooks:
   worktree.added: bin/on-event
   service.started: bin/on-event
 
-requires: [iconv, curl]
+requires: [iconv, curl, python3]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync lerd site domains (sites.yaml) and service domains (config.yaml) into the Windows hosts file (UAC prompt) and /etc/hosts (sudo).
+# Sync lerd's site, worktree and service domains (from lerd's API) into the Windows hosts file (UAC prompt) and /etc/hosts (sudo).
 # Managed lines end with "# lerd" and are rewritten on every run; unmarked lines are never touched.
 # Usage: lerd wsl-hosts:sync [-n]   (-n = dry run, show diff only)
 #        --check: print the domains either hosts file is missing and change nothing (used by the hooks).
@@ -11,26 +11,46 @@ case "${1:-}" in
     --check) check=1 ;;
 esac
 
-sites=~/.local/share/lerd/sites.yaml
 win_hosts=/mnt/c/Windows/System32/drivers/etc/hosts
 command -v wslpath >/dev/null && [ -f "$win_hosts" ] || { echo "wsl-hosts only runs under WSL" >&2; exit 1; }
 
-# ponytail: line-based read of lerd's generated YAML, swap for yq if the format ever changes
-mapfile -t domains < <(
-    awk '/^ *domains:/{d=1;next} d&&/^ *- /{print $2;next} {d=0}' "$sites"
-    awk '/^ *domain: /{print $2}' ~/.config/lerd/config.yaml   # service domains (lerd service domain)
+# Every domain lerd serves: each site's domains, its worktrees' and the services'.
+list=$(python3 - <<'PY'
+import json, os, urllib.request
+
+def api(path):
+    req = urllib.request.Request(os.environ["LERD_API_URL"] + path,
+                                 headers={"X-Lerd-Plugin-Token": os.environ["LERD_API_TOKEN"]})
+    return json.load(urllib.request.urlopen(req))
+
+seen = []
+for site in api("/api/sites"):
+    seen += site.get("domains") or [site.get("domain")]
+    seen += [w.get("domain") for w in site.get("worktrees") or []]
+seen += [s.get("domain") for s in api("/api/services")]
+for d in dict.fromkeys(d for d in seen if d):
+    print(d)
+PY
 )
+domains=()
+[ -n "$list" ] && mapfile -t domains <<<"$list"
 
 for d in "${domains[@]}"; do
-    [[ $d =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "invalid domain in $sites: $d" >&2; exit 1; }
+    [[ $d =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "invalid domain from lerd: $d" >&2; exit 1; }
 done
 
 # Hosts content without managed lines, plus a managed line for each domain not already mapped by hand.
 render() {
-    local body eol=$2
+    local body eol=$2 d old
+    local -A want=() done=()
     body=$(sed -E '/# lerd\r?$/d' "$1")
     printf '%s\n' "$body"
-    for d in "${domains[@]}"; do
+    for d in "${domains[@]}"; do want[$d]=1; done
+    # Lines already there keep their order and new ones go last, so the same domains in another order rewrite nothing.
+    mapfile -t old < <(sed -nE 's/^127\.0\.0\.1 ([^ ]+) # lerd\r?$/\1/p' "$1")
+    for d in "${old[@]}" "${domains[@]}"; do
+        [ -n "${want[$d]:-}" ] && [ -z "${done[$d]:-}" ] || continue
+        done[$d]=1
         maps "$d" <<<"$body" || printf "127.0.0.1 %s # lerd$eol\n" "$d"
     done
 }
